@@ -1,0 +1,73 @@
+def testEnv = ["http://172.23.176.132/opencart/upload/index.php"]
+def currentTime = new Date().format("yyyyMMddHHmmss")
+
+pipeline {
+    agent any
+    options {
+     disableConcurrentBuilds()
+    }
+
+parameters{
+    string (name: 'Number_of_Threads', defaultValue: '1', description: 'Number of Threads To Be Used')
+    string (name: 'ITERATION', defaultValue: '1', description: 'Number of iterations')
+    choice (name: 'Environment', choices: ['testEnv'], description: 'Environment To Be Used')
+    choice (name: 'Type_of_API_test', choices: ['LoadTest', 'StressTest', 'EnduranceTest', 'BaselineTest', 'LoadTest', 'LoadTest_MainFlows', 'ScriptVerification_SmokeTest'], description: 'Type of Test To Be Executed')
+    string (name: 'ramp_up', defaultValue: '2', description: 'Ramp_up for users')
+}
+
+    stages {
+        stage ('Clean Folder'){
+          steps {
+             cleanWs()
+            }  
+        }
+        stage ('trigger test_environment_FrSt') {
+            steps {
+             build 'test_environment_FrSt'    
+            }
+        }
+        stage ('Intro') {
+             steps {
+             echo "Environment: ${params.Environment}"
+             echo "Number_of_Threads: ${params.Number_of_Threads}"
+             echo "ITERATION: ${params.ITERATION}"
+             echo "Type_of_API_test: ${params.Type_of_API_test}"
+             echo "ramp_up: ${params.ramp_up}"
+             }
+         }
+        stage ('Build') {
+            steps {
+             bat """C:/J-meter/apache-jmeter-5.6.2/bin/jmeter -n -t C:/TaskUpdated/Scenarios.jmx -Jthreads=${params.Number_of_Threads} -Jiteration=${params.ITERATION} -Jramp_up=${params.ramp_up} -l  C:/TaskUpdated/HTML_report/result.jtl"""
+             bat """C:/J-meter/apache-jmeter-5.6.2/bin/jmeter -n -t C:/TaskUpdated/Scenarios.jmx -Jthreads=${params.Number_of_Threads} -Jiteration=${params.ITERATION} -Jramp_up=${params.ramp_up} -l  C:/ProgramData/Jenkins/.jenkins/workspace/Task_2_Jenkins/HTMLP/log.csv -e -o C:/ProgramData/Jenkins/.jenkins/workspace/Task_2_Jenkins/HTMLP"""
+            }
+        }
+       
+       stage ('Email Notification') {
+           steps {
+                emailext (subject: 'Jenkins Job', body: 'Hi, welcome to Jenkins email alerts', to: 'covludmila@gmail.com')
+                
+            } 
+       }
+    }
+  
+    post {
+        always {
+            
+        publishHTML target:[
+            allowMissing: true,
+            alwaysLinkToLastBuild: true,
+            keepAll: true,
+            reportDir: 'C:/ProgramData/Jenkins/.jenkins/workspace/test/HTMLP',
+            reportFiles: 'index.html',
+            reportName: 'htmlreport'
+        ]
+        
+           archiveArtifacts artifacts: '**/*', allowEmptyArchive: true
+           
+          // perfReport 'C:/TaskUpdated/HTML_report/result.jtl'
+           perfReport filterRegex: '', relativeFailedThresholdNegative: 1.2, relativeFailedThresholdPositive: 1.89, relativeUnstableThresholdNegative: 1.8, relativeUnstableThresholdPositive: 1.5, sourceDataFiles: 'C:/TaskUpdated/HTML_report/result.jtl'
+       
+        }    
+    }
+    
+}
